@@ -60,24 +60,25 @@ def load_and_process_data():
     # ★★★ ここの列名は、あなたのGoogleフォームの質問順に正確に合わせてください ★★★
     columns = [
         'タイムスタンプ', '氏名',
-        '24時間後の予想緯度（北緯）', '24時間後の予想経度（東経）',
-        '48時間後の予想緯度（北緯）', '48時間後の予想経度（東経）',
-        '72時間後の予想緯度（北緯）', '72時間後の予想経度（東経）',
-        '96時間後の予想緯度（北緯）', '96時間後の予想経度（東経）',
+        '48時間後予想緯度（北緯）', '48時間後予想経度（東経）',
+        '予想の根拠（あれば）',
+        '96時間後予想緯度（北緯）', '96時間後予想経度（東経）',
+        '24時間後予想緯度（北緯）', '24時間後予想経度（東経）',
+        '72時間後予想緯度（北緯）', '72時間後予想経度（東経）',
     ]
     yosou_df = pd.DataFrame(rows[1:], columns=columns)
 
     # 数値に変換
-    num_cols = [col for col in columns if '緯度' in col or '経度' in col]
+    num_cols = [col for col in columns if '予想緯度' in col or '予想経度' in col]
     for col in num_cols:
         yosou_df[col] = pd.to_numeric(yosou_df[col], errors='coerce') # エラーを無視
     yosou_df.dropna(subset=num_cols, inplace=True) # 空欄の行を削除
 
     # --- 3. ランキング計算（Colabセル2） ---
-    yosou_df['誤差_24h(km)'] = calculate_distance(yosou_df['24時間後の予想緯度（北緯）'], yosou_df['24時間後の予想経度（東経）'], seikai_lat_24h, seikai_lon_24h)
-    yosou_df['誤差_48h(km)'] = calculate_distance(yosou_df['48時間後の予想緯度（北緯）'], yosou_df['48時間後の予想経度（東経）'], seikai_lat_48h, seikai_lon_48h)
-    yosou_df['誤差_72h(km)'] = calculate_distance(yosou_df['72時間後の予想緯度（北緯）'], yosou_df['72時間後の予想経度（東経）'], seikai_lat_72h, seikai_lon_72h)
-    yosou_df['誤差_96h(km)'] = calculate_distance(yosou_df['96時間後の予想緯度（北緯）'], yosou_df['96時間後の予想経度（東経）'], seikai_lat_96h, seikai_lon_96h)
+    yosou_df['誤差_24h(km)'] = calculate_distance(yosou_df['24時間後予想緯度（北緯）'], yosou_df['24時間後予想経度（東経）'], seikai_lat_24h, seikai_lon_24h)
+    yosou_df['誤差_48h(km)'] = calculate_distance(yosou_df['48時間後予想緯度（北緯）'], yosou_df['48時間後予想経度（東経）'], seikai_lat_48h, seikai_lon_48h)
+    yosou_df['誤差_72h(km)'] = calculate_distance(yosou_df['72時間後予想緯度（北緯）'], yosou_df['72時間後予想経度（東経）'], seikai_lat_72h, seikai_lon_72h)
+    yosou_df['誤差_96h(km)'] = calculate_distance(yosou_df['96時間後予想緯度（北緯）'], yosou_df['96時間後予想経度（東経）'], seikai_lat_96h, seikai_lon_96h)
     yosou_df['合計誤差(km)'] = yosou_df['誤差_24h(km)'] + yosou_df['誤差_48h(km)'] + yosou_df['誤差_72h(km)'] + yosou_df['誤差_96h(km)']
     result_df = yosou_df.sort_values(by='合計誤差(km)').round(2)
 
@@ -107,10 +108,10 @@ try:
         user_color = colors[i % len(result_df)]
         user_path = [
             [start_lat, start_lon],
-            [row['24時間後の予想緯度（北緯）'], row['24時間後の予想経度（東経）']],
-            [row['48時間後の予想緯度（北緯）'], row['48時間後の予想経度（東経）']],
-            [row['72時間後の予想緯度（北緯）'], row['72時間後の予想経度（東経）']],
-            [row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']]
+            [row['24時間後予想緯度（北緯）'], row['24時間後予想経度（東経）']],
+            [row['48時間後予想緯度（北緯）'], row['48時間後予想経度（東経）']],
+            [row['72時間後予想緯度（北緯）'], row['72時間後予想経度（東経）']],
+            [row['96時間後予想緯度（北緯）'], row['96時間後予想経度（東経）']]
         ]
         AntPath(locations=user_path, color=user_color, weight=3, tooltip=row['氏名']).add_to(m)
 
