@@ -92,7 +92,8 @@ def load_and_process_data():
     yosou_df['誤差_96h(km)'] = calculate_distance(yosou_df['96時間後の予想緯度（北緯）'], yosou_df['96時間後の予想経度（東経）'], seikai_lat_96h, seikai_lon_96h)
     
     yosou_df['合計誤差(km)'] = yosou_df['誤差_24h(km)'] + yosou_df['誤差_48h(km)'] + yosou_df['誤差_72h(km)'] + yosou_df['誤差_96h(km)']
-    result_df = yosou_df.sort_values(by='合計誤差(km)').round(2)
+    result_df = yosou_df.sort_values(by='合計誤差(km)').round(2).reset_index(drop=True)
+    result_df['順位'] = result_df.index + 1
 
     return result_df
 
@@ -107,7 +108,21 @@ try:
 
     # --- ランキング表示 (Colabセル2の display) ---
     st.subheader("🎉🎉 リアルタイム順位 🎉🎉")
-    st.dataframe(result_df[['氏名', '合計誤差(km)', '誤差_24h(km)', '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)']], use_container_width=True)
+    display_columns = [
+        '順位', 
+        '氏名', 
+        '合計誤差(km)', 
+        '誤差_24h(km)', 
+        '誤差_48h(km)', 
+        '誤差_72h(km)', 
+        '誤差_96h(km)'
+    ]
+    st.dataframe(
+        result_df[display_columns],  # 修正した列リストを使う
+        use_container_width=True,
+        hide_index=True              # ← これを追加 (古いインデックス 9, 8, 10 を非表示にする)
+    )
+    
 
     # --- マップ作成（Colabセル3） ---
     st.subheader("🗺️ 全員の進路予想マップ")
