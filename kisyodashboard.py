@@ -147,6 +147,9 @@ try:
 
     st_folium(m, width='100%', height=500, key="result_map")
 
+
 except Exception as e:
-    st.error(f"🚨データの読み込み中にエラーが発生しました: {e}")
-    st.error("GoogleスプレッドシートのURLや「共有」設定、Streamlitの「Secrets」設定を見直してください。")
+    st.error("🚨 アプリの実行中にエラーが発生しました！")
+    st.error(f"エラーの詳細: {e}")
+    import traceback
+    st.exception(traceback.format_exc()) # ← エラーの発生場所を特定する
