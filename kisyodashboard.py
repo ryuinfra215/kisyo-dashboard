@@ -50,7 +50,7 @@ def load_and_process_data():
     creds_dict_fixed = creds_dict_raw.to_dict()
     creds_dict_fixed['private_key'] = creds_dict_fixed['private_key'].replace(r'\\n', '\n').replace(r'\n', '\n')
     # st.secretsからgcp_service_accountという名前の辞書（TOML）を読み込む 
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    creds = Credentials.from_service_account_info(creds_dict_fixed, scopes=scopes)
     gc = gspread.authorize(creds)
 
     # --- 2. データ読み込み（Colabセル1） ---
