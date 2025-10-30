@@ -46,9 +46,10 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 def load_and_process_data():
     # --- 1. 認証（st.secrets を使う） ---
     scopes = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-
-    # st.secretsからgcp_service_accountという名前の辞書（TOML）を読み込む
-    creds_dict = st.secrets["gcp_service_account"] 
+    creds_dict_raw = st.secrets["gcp_service_account"]
+    creds_dict_fixed = creds_dict_raw.to_dict()
+    creds_dict_fixed['private_key'] = creds_dict_fixed['private_key'].replace(r'\\n', '\n').replace(r'\n', '\n')
+    # st.secretsからgcp_service_accountという名前の辞書（TOML）を読み込む 
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     gc = gspread.authorize(creds)
 
