@@ -1,5 +1,5 @@
 # ==========================================================
-# 修正済みの result_app.py (インデントとシート読込を修正)
+# 修正済みの result_app.py (インデントとピン描画を修正)
 # ==========================================================
 import streamlit as st
 import gspread
@@ -59,8 +59,6 @@ def load_and_process_data():
     gc = gspread.authorize(creds)
 
     # --- 2. データ読み込み（Colabセル1） ---
-    
-    # ↓↓↓ シート読み込みを「gid」優先に修正 ↓↓↓
     try:
         spreadsheet = gc.open_by_url(SPREADSHEET_URL)
         gid_str = SPREADSHEET_URL.split('gid=')[-1].split('&')[0]
@@ -109,9 +107,7 @@ def load_and_process_data():
     result_df = yosou_df.sort_values(by='合計誤差(km)').round(2).reset_index(drop=True)
     result_df['順位'] = result_df.index + 1
     
-    # 「直近の応募者」のためにタイムスタンプ列をコピーしておく
     result_df['タイムスタンプ'] = yosou_df['タイムスタンプ']
-
     return result_df
 
 # --- アプリの実行 ---
@@ -123,7 +119,6 @@ try:
     # データをロードして計算
     result_df = load_and_process_data()
 
-    # ↓↓↓ 0件チェックを追加 ↓↓↓
     if result_df.empty:
         st.info("✅ アプリは正常に起動しています。")
         st.info("まだ応募データがありません。最初の応募をお待ちください！")
@@ -159,7 +154,6 @@ try:
         st.subheader("🗺️ 全員の進路予想マップ")
         st.info("現在の1位の経路を赤線で、他の全員の経路をグレーで表示しています。")
         
-        # ★★★ 修正点 1: .head(10) を削除し、全員のデータ(result_df)を対象にする ★★★
         map_df = result_df
         
         m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='CartoDB positron', attribution_control=False)
@@ -168,14 +162,11 @@ try:
         AntPath(locations=actual_path, color='black', weight=7, tooltip='実際の経路').add_to(m)
         
         # --- 全員の線の描画 ---
-        # ★★★ 修正点 2: ループ対象を map_df (全員) にする ★★★
         for i, row in map_df.reset_index().iterrows(): 
             if i == 0:
-                # 1位の人の色
                 line_color = 'red'
                 line_weight = 5 
             else:
-                # 2位以下の人の色
                 line_color = 'gray'
                 line_weight = 2 
 
@@ -195,27 +186,22 @@ try:
 
         # スタートとゴールのマーカー
         folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
-        folium.Marker(location=actual_path[-1], icon=folium.Icon(color='blue', icon='flag'), popup='最終到達点').add_to(m)
+        # ↓↓↓ 1位の色（red）と星（star）のアイコンに修正 ↓↓↓
+        folium.Marker(location=actual_path[-1], icon=folium.Icon(color='red', icon='star'), popup='最終到達点').add_to(m)
 
-        # --- 全員のピンの描画 ---
-        # ★★★ 修正点 3: ループ対象を map_df (全員) にする ★★★
-        for i, row in map_df.reset_index().iterrows():
-            if i == 0:
-                # 1位の人のピン
-                icon_color = 'red'
-            
-            folium.Marker(
-                location=[row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']],
-                icon=folium.Icon(color=icon_color, icon='user'),
-                tooltip=f"<strong>{row['順位']}位: {row['氏名']}</strong>",
-                popup=f"<strong>{row['順位']}位: {row['氏名']}</strong><br>合計誤差: {row['合計誤差(km)']} km"
-            ).add_to(m)
+        # --- ★★★ 1位のピンのみ描画 ★★★ ---
+        # 1位の行（インデックス0）を取得
+        winner_row = map_df.iloc[0]
+        folium.Marker(
+            location=[winner_row['96時間後の予想緯度（北緯）'], winner_row['96時間後の予想経度（東経）']],
+            icon=folium.Icon(color='red', icon='user'),
+            tooltip=f"<strong>{winner_row['順位']}位: {winner_row['氏名']}</strong>",
+            popup=f"<strong>{winner_row['順位']}位: {winner_row['氏名']}</strong><br>合計誤差: {winner_row['合計誤差(km)']} km"
+        ).add_to(m)
         
         st_folium(m, width='100%', height=500, key="result_map")
 
-# ... (except ブロックは変更なし) ...
 except Exception as e:
-    # ↓↓↓ ここが切れていた部分です ↓↓↓
     st.error(f"🚨データの読み込み中にエラーが発生しました: {e}")
     st.error("GoogleスプレッドシートのURLや「共有」設定、Streamlitの「Secrets」設定、列名が正しいか確認してください。")
     # デバッグ用に詳細なエラーを表示したい場合は、以下の2行をコメント解除してください
