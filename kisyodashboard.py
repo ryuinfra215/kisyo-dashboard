@@ -1,7 +1,6 @@
 # ==========================================================
-# 修正済みの result_app.py (インデントと列名を修正)
+# 修正済みの result_app.py (インデントとシート読込を修正)
 # ==========================================================
-
 import streamlit as st
 import gspread
 import pandas as pd
@@ -29,6 +28,8 @@ seikai_lat_72h = 32.0
 seikai_lon_72h = 137.4
 seikai_lat_96h = 40.1
 seikai_lon_96h = 145.1
+
+# ↓↓↓ インデントを半角スペース4つに修正 ↓↓↓
 actual_path = [
     [start_lat, start_lon],
     [seikai_lat_24h, seikai_lon_24h],
@@ -47,7 +48,6 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     return R * c
 
 # --- メインの処理（手動更新専用） ---
-# @st.cache_data は「手動更新」ボタンが押されるまで結果を使い回す
 @st.cache_data 
 def load_and_process_data():
     # --- 1. 認証（st.secrets を使う） ---
@@ -59,22 +59,37 @@ def load_and_process_data():
     gc = gspread.authorize(creds)
 
     # --- 2. データ読み込み（Colabセル1） ---
-    worksheet = gc.open_by_url(SPREADSHEET_URL).sheet1
+    
+    # ↓↓↓ シート読み込みを「gid」優先に修正 ↓↓↓
+    try:
+        spreadsheet = gc.open_by_url(SPREADSHEET_URL)
+        gid_str = SPREADSHEET_URL.split('gid=')[-1].split('&')[0]
+        worksheet = None
+        if gid_str.isdigit():
+            worksheet = spreadsheet.get_worksheet_by_id(int(gid_str))
+        if worksheet is None:
+            worksheet = spreadsheet.worksheet("フォームの回答 1") # GIDが見つからない場合の予備
+    except Exception:
+        worksheet = gc.open_by_url(SPREADSHEET_URL).sheet1 # 最終手段
+    
     rows = worksheet.get_all_values()
 
-    # ★★★ ここの列名を、Colabで動いたものと完全に一致させます ★★★
+    # ↓↓↓ 0件チェックを追加 ↓↓↓
+    if len(rows) <= 1:
+        empty_cols = [
+            '順位', '氏名', '合計誤差(km)', '誤差_24h(km)', 
+            '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)', 'タイムスタンプ'
+        ]
+        return pd.DataFrame(columns=empty_cols)
+
+    # Colabで動いた列名（'予想の根拠'）に合わせる
     columns = [
-        'タイムスタンプ',                 # A列
-        '氏名',                         # B列
-        '48時間後の予想緯度（北緯）',         # C列
-        '48時間後の予想経度（東経）',         # D列
-        '予想の根拠',                   # E列  <- (あれば) を削除！
-        '96時間後の予想緯度（北緯）',         # F列
-        '96時間後の予想経度（東経）',         # G列
-        '24時間後の予想緯度（北緯）',         # H列
-        '24時間後の予想経度（東経）',         # I列
-        '72時間後の予想緯度（北緯）',         # J列
-        '72時間後の予想経度（東経）'          # K列
+        'タイムスタンプ', '氏名',
+        '48時間後の予想緯度（北緯）', '48時間後の予想経度（東経）',
+        '予想の根拠', # E列
+        '96時間後の予想緯度（北緯）', '96時間後の予想経度（東経）',
+        '24時間後の予想緯度（北緯）', '24時間後の予想経度（東経）',
+        '72時間後の予想緯度（北緯）', '72時間後の予想経度（東経）'
     ]
     yosou_df = pd.DataFrame(rows[1:], columns=columns)
 
@@ -85,7 +100,6 @@ def load_and_process_data():
     yosou_df.dropna(subset=num_cols, inplace=True)
 
     # --- 3. ランキング計算（Colabセル2） ---
-    # ★★★ ここの列名も、Colabで動いたものと一致させます ★★★
     yosou_df['誤差_24h(km)'] = calculate_distance(yosou_df['24時間後の予想緯度（北緯）'], yosou_df['24時間後の予想経度（東経）'], seikai_lat_24h, seikai_lon_24h)
     yosou_df['誤差_48h(km)'] = calculate_distance(yosou_df['48時間後の予想緯度（北緯）'], yosou_df['48時間後の予想経度（東経）'], seikai_lat_48h, seikai_lon_48h)
     yosou_df['誤差_72h(km)'] = calculate_distance(yosou_df['72時間後の予想緯度（北緯）'], yosou_df['72時間後の予想経度（東経）'], seikai_lat_72h, seikai_lon_72h)
@@ -94,6 +108,9 @@ def load_and_process_data():
     yosou_df['合計誤差(km)'] = yosou_df['誤差_24h(km)'] + yosou_df['誤差_48h(km)'] + yosou_df['誤差_72h(km)'] + yosou_df['誤差_96h(km)']
     result_df = yosou_df.sort_values(by='合計誤差(km)').round(2).reset_index(drop=True)
     result_df['順位'] = result_df.index + 1
+    
+    # 「直近の応募者」のためにタイムスタンプ列をコピーしておく
+    result_df['タイムスタンプ'] = yosou_df['タイムスタンプ']
 
     return result_df
 
@@ -106,69 +123,81 @@ try:
     # データをロードして計算
     result_df = load_and_process_data()
 
-    # --- ランキング表示 (Colabセル2の display) ---
-    st.subheader("🎉🎉 リアルタイム順位 🎉🎉")
-    display_columns = [
-        '順位', 
-        '氏名', 
-        '合計誤差(km)', 
-        '誤差_24h(km)', 
-        '誤差_48h(km)', 
-        '誤差_72h(km)', 
-        '誤差_96h(km)'
-    ]
-    st.dataframe(
-        result_df[display_columns],  # 修正した列リストを使う
-        use_container_width=True,
-        hide_index=True              # ← これを追加 (古いインデックス 9, 8, 10 を非表示にする)
-    )
-    
-
-    # --- マップ作成（Top 10 のみ） ---
-    st.subheader("🗺️ トップ10の進路予想マップ")
-
-    # ★★★ 1. データをTop10に絞る ★★★
-    map_df = result_df.head(10)
-    
-    m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='CartoDB positron', attribution_control=False)
-    colors = ['blue', 'green', 'purple', 'orange', 'darkred', 'lightred', 'beige', 'darkblue', 'darkgreen', 'cadetblue']
-
-    # 実際の経路
-    AntPath(locations=actual_path, color='black', weight=7, tooltip='実際の経路').add_to(m)
-
-    # ★★★ 2. 線の描画 (map_df でループし、len(colors) で割る) ★★★
-    for i, row in map_df.reset_index().iterrows(): # reset_index() で i が 0,1,2... になる
-        user_color = colors[i % len(colors)] # len(colors) で割る
-        user_path = [
-            [start_lat, start_lon],
-            [row['24時間後の予想緯度（北緯）'], row['24時間後の予想経度（東経）']],
-            [row['48時間後の予想緯度（北緯）'], row['48時間後の予想経度（東経）']],
-            [row['72時間後の予想緯度（北緯）'], row['72時間後の予想経度（東経）']],
-            [row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']]
+    # ↓↓↓ 0件チェックを追加 ↓↓↓
+    if result_df.empty:
+        st.info("✅ アプリは正常に起動しています。")
+        st.info("まだ応募データがありません。最初の応募をお待ちください！")
+    else:
+        # --- 1. トップ10のランキング ---
+        st.subheader("🎉🎉 リアルタイム順位 (Top 10) 🎉🎉")
+        display_columns = [
+            '順位', '氏名', '合計誤差(km)', 
+            '誤差_24h(km)', '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)'
         ]
-        AntPath(locations=user_path, color=user_color, weight=3, tooltip=row['氏名']).add_to(m)
+        st.dataframe(
+            result_df.head(10)[display_columns],
+            use_container_width=True,
+            hide_index=True 
+        )
 
-    # スタートとゴールのマーカー
-    folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
-    folium.Marker(location=actual_path[-1], icon=folium.Icon(color='red', icon='star'), popup='最終到達点').add_to(m)
+        st.divider() 
 
-    # ★★★ 3. ピンの描画 (map_df でループし、len(colors) で割る) ★★★
-    # (このループが欠落していたので追加しました)
-    for i, row in map_df.reset_index().iterrows():
-        user_color = colors[i % len(colors)]
-        folium.Marker(
-            location=[row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']],
-            icon=folium.Icon(color=user_color, icon='user'),
-            tooltip=f"<strong>{row['氏名']}</strong>",
-            popup=f"<strong>{row['氏名']}</strong><br>合計誤差: {row['合計誤差(km)']} km"
-        ).add_to(m)
+        # --- 2. 直近の応募者 (最新5名) ---
+        st.subheader("✨ 直近の応募者 (最新5名)")
+        st.info("応募ありがとうございます！こちらの表で順位をご確認ください。")
+        
+        recent_df = result_df.sort_values(by='タイムスタンプ', ascending=False)
+        
+        st.dataframe(
+            recent_df.head(5)[display_columns], 
+            use_container_width=True,
+            hide_index=True 
+        )
 
-    # マップ表示
-    st_folium(m, width='100%', height=500, key="result_map")
+        # --- マップ作成（Top 10 のみ） ---
+        st.divider()
+        st.subheader("🗺️ トップ10の進路予想マップ")
+        
+        map_df = result_df.head(10)
+        
+        m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='CartoDB positron', attribution_control=False)
+        colors = ['blue', 'green', 'purple', 'orange', 'darkred', 'lightred', 'beige', 'darkblue', 'darkgreen', 'cadetblue']
 
+        # 実際の経路
+        AntPath(locations=actual_path, color='black', weight=7, tooltip='実際の経路').add_to(m)
+
+        # Top10の線の描画
+        for i, row in map_df.reset_index().iterrows(): 
+            user_color = colors[i % len(colors)] 
+            user_path = [
+                [start_lat, start_lon],
+                [row['24時間後の予想緯度（北緯）'], row['24時間後の予想経度（東経）']],
+                [row['48時間後の予想緯度（北緯）'], row['48時間後の予想経度（東経）']],
+                [row['72時間後の予想緯度（北緯）'], row['72時間後の予想経度（東経）']],
+                [row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']]
+            ]
+            AntPath(locations=user_path, color=user_color, weight=3, tooltip=row['氏名']).add_to(m)
+
+        # スタートとゴールのマーカー
+        folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
+        folium.Marker(location=actual_path[-1], icon=folium.Icon(color='red', icon='star'), popup='最終到達点').add_to(m)
+
+        # Top10のピンの描画
+        for i, row in map_df.reset_index().iterrows():
+            user_color = colors[i % len(colors)]
+            folium.Marker(
+                location=[row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']],
+                icon=folium.Icon(color=user_color, icon='user'),
+                tooltip=f"<strong>{row['氏名']}</strong>",
+                popup=f"<strong>{row['氏名']}</strong><br>合計誤差: {row['合計誤差(km)']} km"
+            ).add_to(m)
+        
+        st_folium(m, width='100%', height=500, key="result_map")
 
 except Exception as e:
-    st.error("🚨 アプリの実行中にエラーが発生しました！")
-    st.error(f"エラーの詳細: {e}")
-    import traceback
-    st.exception(traceback.format_exc())
+    # ↓↓↓ ここが切れていた部分です ↓↓↓
+    st.error(f"🚨データの読み込み中にエラーが発生しました: {e}")
+    st.error("GoogleスプレッドシートのURLや「共有」設定、Streamlitの「Secrets」設定、列名が正しいか確認してください。")
+    # デバッグ用に詳細なエラーを表示したい場合は、以下の2行をコメント解除してください
+    # import traceback
+    # st.exception(traceback.format_exc())
