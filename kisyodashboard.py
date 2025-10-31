@@ -124,15 +124,21 @@ try:
     )
     
 
-    # --- マップ作成（Colabセル3） ---
-    st.subheader("🗺️ 全員の進路予想マップ")
+    # --- マップ作成（Top 10 のみ） ---
+    st.subheader("🗺️ トップ10の進路予想マップ")
+
+    # ★★★ 1. データをTop10に絞る ★★★
+    map_df = result_df.head(10)
+    
     m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='CartoDB positron', attribution_control=False)
     colors = ['blue', 'green', 'purple', 'orange', 'darkred', 'lightred', 'beige', 'darkblue', 'darkgreen', 'cadetblue']
 
+    # 実際の経路
     AntPath(locations=actual_path, color='black', weight=7, tooltip='実際の経路').add_to(m)
 
-    for i, row in result_df.iterrows():
-        user_color = colors[i % len(result_df)]
+    # ★★★ 2. 線の描画 (map_df でループし、len(colors) で割る) ★★★
+    for i, row in map_df.reset_index().iterrows(): # reset_index() で i が 0,1,2... になる
+        user_color = colors[i % len(colors)] # len(colors) で割る
         user_path = [
             [start_lat, start_lon],
             [row['24時間後の予想緯度（北緯）'], row['24時間後の予想経度（東経）']],
@@ -142,14 +148,24 @@ try:
         ]
         AntPath(locations=user_path, color=user_color, weight=3, tooltip=row['氏名']).add_to(m)
 
+    # スタートとゴールのマーカー
     folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
     folium.Marker(location=actual_path[-1], icon=folium.Icon(color='red', icon='star'), popup='最終到達点').add_to(m)
 
+    # ★★★ 3. ピンの描画 (map_df でループし、len(colors) で割る) ★★★
+    # (このループが欠落していたので追加しました)
+    for i, row in map_df.reset_index().iterrows():
+        user_color = colors[i % len(colors)]
+        folium.Marker(
+            location=[row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']],
+            icon=folium.Icon(color=user_color, icon='user'),
+            tooltip=f"<strong>{row['氏名']}</strong>",
+            popup=f"<strong>{row['氏名']}</strong><br>合計誤差: {row['合計誤差(km)']} km"
+        ).add_to(m)
+
+    # マップ表示
     st_folium(m, width='100%', height=500, key="result_map")
 
 
 except Exception as e:
-    st.error("🚨 アプリの実行中にエラーが発生しました！")
-    st.error(f"エラーの詳細: {e}")
-    import traceback
-    st.exception(traceback.format_exc()) # ← エラーの発生場所を特定する
+    # ... (エラー表示部分は、デバッグが完了したら元に戻してください) ...
