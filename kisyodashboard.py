@@ -195,7 +195,7 @@ try:
 
         # スタートとゴールのマーカー
         folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
-        folium.Marker(location=actual_path[-1], icon=folium.Icon(color='red', icon='star'), popup='最終到達点').add_to(m)
+        folium.Marker(location=actual_path[-1], icon=folium.Icon(color='blue', icon='flag'), popup='最終到達点').add_to(m)
 
         # --- 全員のピンの描画 ---
         # ★★★ 修正点 3: ループ対象を map_df (全員) にする ★★★
@@ -203,9 +203,6 @@ try:
             if i == 0:
                 # 1位の人のピン
                 icon_color = 'red'
-            else:
-                # 2位以下の人のピン
-                icon_color = 'gray'
             
             folium.Marker(
                 location=[row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']],
