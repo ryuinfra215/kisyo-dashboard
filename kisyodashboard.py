@@ -154,21 +154,31 @@ try:
             hide_index=True 
         )
 
-        # --- マップ作成（Top 10 のみ） ---
+        # --- マップ作成（全員を表示、1位をハイライト） ---
         st.divider()
-        st.subheader("🗺️ トップ10の進路予想マップ")
+        st.subheader("🗺️ 全員の進路予想マップ")
+        st.info("現在の1位の経路を赤線で、他の全員の経路をグレーで表示しています。")
         
-        map_df = result_df.head(10)
+        # ★★★ 修正点 1: .head(10) を削除し、全員のデータ(result_df)を対象にする ★★★
+        map_df = result_df
         
         m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='CartoDB positron', attribution_control=False)
-        colors = ['blue', 'green', 'purple', 'orange', 'darkred', 'lightred', 'beige', 'darkblue', 'darkgreen', 'cadetblue']
 
         # 実際の経路
         AntPath(locations=actual_path, color='black', weight=7, tooltip='実際の経路').add_to(m)
-
-        # Top10の線の描画
+        
+        # --- 全員の線の描画 ---
+        # ★★★ 修正点 2: ループ対象を map_df (全員) にする ★★★
         for i, row in map_df.reset_index().iterrows(): 
-            user_color = colors[i % len(colors)] 
+            if i == 0:
+                # 1位の人の色
+                line_color = 'red'
+                line_weight = 5 
+            else:
+                # 2位以下の人の色
+                line_color = 'gray'
+                line_weight = 2 
+
             user_path = [
                 [start_lat, start_lon],
                 [row['24時間後の予想緯度（北緯）'], row['24時間後の予想経度（東経）']],
@@ -176,24 +186,37 @@ try:
                 [row['72時間後の予想緯度（北緯）'], row['72時間後の予想経度（東経）']],
                 [row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']]
             ]
-            AntPath(locations=user_path, color=user_color, weight=3, tooltip=row['氏名']).add_to(m)
+            AntPath(
+                locations=user_path, 
+                color=line_color, 
+                weight=line_weight, 
+                tooltip=row['氏名']
+            ).add_to(m)
 
         # スタートとゴールのマーカー
         folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
         folium.Marker(location=actual_path[-1], icon=folium.Icon(color='red', icon='star'), popup='最終到達点').add_to(m)
 
-        # Top10のピンの描画
+        # --- 全員のピンの描画 ---
+        # ★★★ 修正点 3: ループ対象を map_df (全員) にする ★★★
         for i, row in map_df.reset_index().iterrows():
-            user_color = colors[i % len(colors)]
+            if i == 0:
+                # 1位の人のピン
+                icon_color = 'red'
+            else:
+                # 2位以下の人のピン
+                icon_color = 'gray'
+            
             folium.Marker(
                 location=[row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']],
-                icon=folium.Icon(color=user_color, icon='user'),
-                tooltip=f"<strong>{row['氏名']}</strong>",
-                popup=f"<strong>{row['氏名']}</strong><br>合計誤差: {row['合計誤差(km)']} km"
+                icon=folium.Icon(color=icon_color, icon='user'),
+                tooltip=f"<strong>{row['順位']}位: {row['氏名']}</strong>",
+                popup=f"<strong>{row['順位']}位: {row['氏名']}</strong><br>合計誤差: {row['合計誤差(km)']} km"
             ).add_to(m)
         
         st_folium(m, width='100%', height=500, key="result_map")
 
+# ... (except ブロックは変更なし) ...
 except Exception as e:
     # ↓↓↓ ここが切れていた部分です ↓↓↓
     st.error(f"🚨データの読み込み中にエラーが発生しました: {e}")
