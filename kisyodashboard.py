@@ -153,70 +153,86 @@ try:
         
         map_df = result_df
         
-        # 1位と最新の応募者の「氏名」を取得
-        winner_name = result_df.iloc[0]['氏名']
-        latest_name = recent_df.iloc[0]['氏名']
-
-        m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='CartoDB positron', attribution_control=False)
-
-        # 実際の経路 (これはアニメーション線 AntPath のまま)
-        AntPath(locations=actual_path, color='black', weight=7, tooltip='実際の経路').add_to(m)
-        
-        # --- 全員の線の描画 ---
-        for i, row in map_df.reset_index().iterrows():
-            current_name = row['氏名']
-            
-            if current_name == latest_name:
-                line_color = 'blue' # 最新
-                line_weight = 5
-            elif i == 0: # i == 0 は 1位
-                line_color = 'red'  # 1位
-                line_weight = 5
-            else:
-                line_color = 'gray' # その他
-                line_weight = 2 
-
-            user_path = [
-                [start_lat, start_lon],
-                [row['24時間後の予想緯度（北緯）'], row['24時間後の予想経度（東経）']],
-                [row['48時間後の予想緯度（北緯）'], row['48時間後の予想経度（東経）']],
-                [row['72時間後の予想緯度（北緯）'], row['72時間後の予想経度（東経）']],
-                [row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']]
-            ]
-            
-            # ★★★ AntPath から PolyLine (実線) に変更 ★★★
-            folium.PolyLine(
-                locations=user_path, 
-                color=line_color, 
-                weight=line_weight, 
-                tooltip=row['氏名']
-            ).add_to(m)
-
-        # --- スタートとゴールのマーカー ---
-        folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
-        folium.Marker(location=actual_path[-1], icon=folium.Icon(color='black', icon='flag'), popup='最終到達点').add_to(m)
-
-        # --- ★★★ 1位と最新のピンのみ描画 ★★★ ---
+        # 1位と最新の応募者の行データを先に取得
         winner_row = result_df.iloc[0]
         latest_row = recent_df.iloc[0]
+        winner_name = winner_row['氏名']
+        latest_name = latest_row['氏名']
 
-        if winner_row['氏名'] == latest_row['氏名']:
-            # 1位 かつ 最新 の場合
+        m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='CartoDB positron', attribution_control=False)
+        
+        # --- ★★★ 描画順 1: 「その他全員（グレー）」を先に描画 ★★★ ---
+        for i, row in map_df.iterrows():
+            # 1位と最新の応募者「以外」の線を描画
+            if row['氏名'] != winner_name and row['氏名'] != latest_name:
+                user_path = [
+                    [start_lat, start_lon],
+                    [row['24時間後の予想緯度（北緯）'], row['24時間後の予想経度（東経）']],
+                    [row['48時間後の予想緯度（北緯）'], row['48時間後の予想経度（東経）']],
+                    [row['72時間後の予想緯度（北緯）'], row['72時間後の予想経度（東経）']],
+                    [row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']]
+                ]
+                folium.PolyLine(
+                    locations=user_path, 
+                    color='gray', 
+                    weight=2, 
+                    tooltip=row['氏名']
+                ).add_to(m)
+
+        # --- ★★★ 描画順 2: 「実際の経路（黒）」を描画 ★★★ ---
+        AntPath(locations=actual_path, color='black', weight=7, tooltip='実際の経路').add_to(m)
+
+        # --- ★★★ 描画順 3: 「1位の経路（赤）」を描画 ★★★ ---
+        # (ただし、1位が最新でない場合のみ。最新なら青が優先される)
+        if winner_name != latest_name:
+            winner_path = [
+                [start_lat, start_lon],
+                [winner_row['24時間後の予想緯度（北緯）'], winner_row['24時間後の予想経度（東経）']],
+                [winner_row['48時間後の予想緯度（北緯）'], winner_row['48時間後の予想経度（東経）']],
+                [winner_row['72時間後の予想緯度（北緯）'], winner_row['72時間後の予想経度（東経）']],
+                [winner_row['96時間後の予想緯度（北緯）'], winner_row['96時間後の予想経度（東経）']]
+            ]
+            folium.PolyLine(
+                locations=winner_path, 
+                color='red', 
+                weight=5, 
+                tooltip=winner_row['氏名']
+            ).add_to(m)
+
+        # --- ★★★ 描画順 4: 「最新の経路（青）」を最後に描画（最前面） ★★★ ---
+        latest_path = [
+            [start_lat, start_lon],
+            [latest_row['24時間後の予想緯度（北緯）'], latest_row['24時間後の予想経度（東経）']],
+            [latest_row['48時間後の予想緯度（北緯）'], latest_row['48時間後の予想経度（東経）']],
+            [latest_row['72時間後の予想緯度（北緯）'], latest_row['72時間後の予想経度（東経）']],
+            [latest_row['96時間後の予想緯度（北緯）'], latest_row['96時間後の予想経度（東経）']]
+        ]
+        folium.PolyLine(
+            locations=latest_path, 
+            color='blue', 
+            weight=5, 
+            tooltip=latest_row['氏名']
+        ).add_to(m)
+
+        # --- マーカー（ピン）の描画（順不同） ---
+        folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
+        folium.Marker(location=actual_path[-1], icon=folium.Icon(color='red', icon='star'), popup='最終到達点').add_to(m)
+
+        # 1位と最新のピンのみ描画 (ロジックは変更なし)
+        if winner_name == latest_name:
             folium.Marker(
                 location=[winner_row['96時間後の予想緯度（北緯）'], winner_row['96時間後の予想経度（東経）']],
-                icon=folium.Icon(color='purple', icon='user'), # 色を紫に
+                icon=folium.Icon(color='purple', icon='user'), 
                 tooltip=f"<strong>★1位 (NEW!)★: {winner_row['氏名']}</strong>",
                 popup=f"<strong>★1位 (NEW!)★: {winner_row['氏名']}</strong><br>合計誤差: {winner_row['合計誤差(km)']} km"
             ).add_to(m)
         else:
-            # 1位のピン（赤）
             folium.Marker(
                 location=[winner_row['96時間後の予想緯度（北緯）'], winner_row['96時間後の予想経度（東経）']],
                 icon=folium.Icon(color='red', icon='user'),
                 tooltip=f"<strong>{winner_row['順位']}位: {winner_row['氏名']}</strong>",
                 popup=f"<strong>{winner_row['順位']}位: {winner_row['氏名']}</strong><br>合計誤差: {winner_row['合計誤差(km)']} km"
             ).add_to(m)
-            # 最新のピン（青）
             folium.Marker(
                 location=[latest_row['96時間後の予想緯度（北緯）'], latest_row['96時間後の予想経度（東経）']],
                 icon=folium.Icon(color='blue', icon='user'),
@@ -226,6 +242,7 @@ try:
         
         st_folium(m, width='100%', height=500, key="result_map")
 
+# ... (except ブロックは変更なし) ...
 except Exception as e:
     st.error(f"🚨データの読み込み中にエラーが発生しました: {e}")
     st.error("GoogleスプレッドシートのURLや「共有」設定、Streamlitの「Secrets」設定、列名が正しいか確認してください。")
