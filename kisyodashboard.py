@@ -146,7 +146,7 @@ try:
 
             # --- 2. 直近の応募者 (最新5名) ---
             st.subheader("✨ 直近の応募者 (最新5名)")
-            st.info(f"現在の参加者数は{len(yosou_df['合計誤差(km)'])}人です！")
+            st.info(f"現在の参加者数は{len(result_df['合計誤差(km)'])}人です！")
             
             st.dataframe(
                 recent_df.head(5)[display_columns], 
