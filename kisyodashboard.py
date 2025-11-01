@@ -162,7 +162,8 @@ try:
 
         # --- col2 (右側) にマップを表示 ---
         with col2:
-            st.markdown("🗺️**進路予想マップ**<small>1位:赤、最新:青、その他:グレー</small>",unsafe_allow_html = True)
+            st.subheader("🗺️**進路予想マップ**")
+            st.markdown("<small>1位:赤、最新:青、その他:グレー</small>",unsafe_allow_html = True)
            
             map_df = result_df
             
