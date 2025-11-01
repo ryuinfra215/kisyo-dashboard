@@ -134,7 +134,6 @@ try:
             st.subheader("🎉リアルタイム順位 (Top 5)🎉")
             display_columns = [
                 '順位', '氏名', '合計誤差(km)', 
-                '誤差_24h(km)', '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)'
             ]
             st.dataframe(
                 result_df.head(5)[display_columns],
