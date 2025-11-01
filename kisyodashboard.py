@@ -131,13 +131,13 @@ try:
         # --- col1 (左側) にランキングを表示 ---
         with col1:
             # --- 1. トップ10のランキング ---
-            st.subheader("🎉リアルタイム順位 (Top 10)🎉")
+            st.subheader("🎉リアルタイム順位 (Top 5)🎉")
             display_columns = [
                 '順位', '氏名', '合計誤差(km)', 
                 '誤差_24h(km)', '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)'
             ]
             st.dataframe(
-                result_df.head(10)[display_columns],
+                result_df.head(5)[display_columns],
                 use_container_width=True,
                 hide_index=True 
             )
@@ -146,7 +146,7 @@ try:
 
             # --- 2. 直近の応募者 (最新5名) ---
             st.subheader("✨ 直近の応募者 (最新5名)")
-            st.info("応募ありがとうございます！")
+            st.info(f"現在の参加者数は{len(yosou_df['合計誤差(km)'])}人です！")
             
             st.dataframe(
                 recent_df.head(5)[display_columns], 
@@ -157,7 +157,7 @@ try:
         # --- col2 (右側) にマップを表示 ---
         with col2:
             st.subheader("🗺️ 全員の進路予想マップ")
-            st.info("1位（赤）、最新（青）、その他（グレー）")
+            st.info("1位（赤）、最新（青）、その他（グレー）", fontsize = 10)
             
             map_df = result_df
             
