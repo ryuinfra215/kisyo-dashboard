@@ -149,9 +149,12 @@ try:
             # --- 2. 直近の応募者 (最新5名) ---
             st.subheader("✨ 直近の応募者 (最新5名)")
             st.info(f"現在の参加者数は{len(result_df['合計誤差(km)'])}人です！")
-            
+            display_columns_recent= [
+                '順位', '氏名', '合計誤差(km)', '誤差_24h(km)', '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)',
+            ]
+
             st.dataframe(
-                recent_df.head(5)[display_columns].style.format({'合計誤差(km)': "{:.2f}"}).set_table_styles(table_styles),
+                recent_df.head(5)[display_columns_recent].style.format({'合計誤差(km)': "{:.d}"}).set_table_styles(table_styles),
                 use_container_width=True,
                 hide_index=True 
             )
