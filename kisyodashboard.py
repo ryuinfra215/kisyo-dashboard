@@ -136,7 +136,7 @@ try:
                 '順位', '氏名', '合計誤差(km)', 
             ]
             st.dataframe(
-                result_df.head(5)[display_columns].style.set_properties(**{'text-align': 'center'}),
+                result_df.head(5)[display_columns].style.set_properties(**{'text-align': 'center'})
                 use_container_width=True,
                 hide_index=True 
             )
@@ -148,14 +148,13 @@ try:
             st.info(f"現在の参加者数は{len(result_df['合計誤差(km)'])}人です！")
             
             st.dataframe(
-                recent_df.head(5)[display_columns].style.set_properties(**{'text-align': 'center'}), 
-                use_container_width=True,
+                recent_df.head(5)[display_columns].style.set_properties(**{'text-align': 'center'}).set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
                 hide_index=True 
             )
 
         # --- col2 (右側) にマップを表示 ---
         with col2:
-            st.subheader("🗺️ 全員の進路予想マップ 1位:赤、最新:青、その他:グレー")
+            st.subheader("🗺️ 進路予想マップ 1位:赤、最新:青、その他:グレー")
            
             map_df = result_df
             
