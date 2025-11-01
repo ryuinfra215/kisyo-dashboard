@@ -131,8 +131,7 @@ try:
         # --- col1 (左側) にランキングを表示 ---
         with col1:
             table_styles = [
-                {'selector': 'th', 'props': [('text-align', 'center')]},  # ヘッダー
-                {'selector': 'td', 'props': [('text-align', 'center')]} # データセル
+                {'selector': 'th, td', 'props': [('text-align', 'center')]} # データセル
             ]
             # --- 1. トップ10のランキング ---
             st.subheader("🎉リアルタイム順位 (Top 5)🎉")
@@ -140,7 +139,7 @@ try:
                 '順位', '氏名', '合計誤差(km)', 
             ]
             st.dataframe(
-                result_df.head(5)[display_columns].style.set_table_styles(table_styles),
+                result_df.head(5)[display_columns].style.format({'合計誤差(km)': "{:.2f}"}).set_table_styles(table_styles),
                 use_container_width=True,
                 hide_index=True 
             )
@@ -152,14 +151,14 @@ try:
             st.info(f"現在の参加者数は{len(result_df['合計誤差(km)'])}人です！")
             
             st.dataframe(
-                recent_df.head(5)[display_columns].style.set_table_styles(table_styles),
+                recent_df.head(5)[display_columns].style.format({'合計誤差(km)': "{:.2f}"}).set_table_styles(table_styles),
                 use_container_width=True,
                 hide_index=True 
             )
 
         # --- col2 (右側) にマップを表示 ---
         with col2:
-            st.subheader("🗺️ 進路予想マップ 1位:赤、最新:青、その他:グレー")
+            st.markdown("🗺️**進路予想マップ**<small>1位:赤、最新:青、その他:グレー</small>",unsafe_allow_html = True)
            
             map_df = result_df
             
