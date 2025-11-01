@@ -154,7 +154,7 @@ try:
             ]
 
             st.dataframe(
-                recent_df.head(5)[display_columns_recent].style.format({'合計誤差(km)': "{:.d}"}).set_table_styles(table_styles),
+                recent_df.head(5)[display_columns_recent].style.format({'合計誤差(km)': "{:.0f}"}).set_table_styles(table_styles),
                 use_container_width=True,
                 hide_index=True 
             )
