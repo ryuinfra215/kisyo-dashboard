@@ -152,9 +152,10 @@ try:
             display_columns_recent= [
                 '順位', '氏名', '合計誤差(km)', '誤差_24h(km)', '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)',
             ]
-
+            format_dict = {'合計誤差(km)': "{:.0f}",'誤差_24h(km)': "{:.0f}",'誤差_48h(km)': "{:.0f}",'誤差_72h(km)': "{:.0f}",'誤差_96h(km)': "{:.0f}"}
+            header_style = [{'selector': 'th', 'props': [('text-align', 'center')]}]
             st.dataframe(
-                recent_df.head(5)[display_columns_recent].style.format({'合計誤差(km)': "{:.0f}"}).set_table_styles(table_styles),
+                recent_df.head(5)[display_columns_recent].style.format(format_dict).set_properties(**{'text-align': 'center'}).set_table_styles(header_style),
                 use_container_width=True,
                 hide_index=True 
             )
