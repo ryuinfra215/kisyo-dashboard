@@ -130,15 +130,17 @@ try:
 
         # --- col1 (左側) にランキングを表示 ---
         with col1:
+            table_styles = [
+                {'selector': 'th', 'props': [('text-align', 'center')]},  # ヘッダー
+                {'selector': 'td', 'props': [('text-align', 'center')]} # データセル
+            ]
             # --- 1. トップ10のランキング ---
             st.subheader("🎉リアルタイム順位 (Top 5)🎉")
             display_columns = [
                 '順位', '氏名', '合計誤差(km)', 
             ]
             st.dataframe(
-                result_df.head(5)[display_columns]
-                    .style.set_properties(**{'text-align': 'center'})
-                    .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
+                result_df.head(5)[display_columns].style.set_table_styles(table_styles),
                 use_container_width=True,
                 hide_index=True 
             )
@@ -150,7 +152,7 @@ try:
             st.info(f"現在の参加者数は{len(result_df['合計誤差(km)'])}人です！")
             
             st.dataframe(
-                recent_df.head(5)[display_columns].style.set_properties(**{'text-align': 'center'}).set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
+                recent_df.head(5)[display_columns].style.style.set_table_styles(table_styles),
                 use_container_width=True,
                 hide_index=True 
             )
