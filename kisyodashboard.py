@@ -157,7 +157,7 @@ try:
         # --- col2 (右側) にマップを表示 ---
         with col2:
             st.subheader("🗺️ 全員の進路予想マップ")
-            st.info("1位（赤）、最新（青）、その他（グレー）", fontsize = 10)
+            st.info("1位（赤）、最新（青）、その他（グレー）")
             
             map_df = result_df
             
