@@ -13,6 +13,8 @@ from google.oauth2.service_account import Credentials
 # --- アプリの基本設定 ---
 st.set_page_config(page_title="台風コンテスト リアルタイム集計",layout="wide")
 st.title("🌪️ 台風進路予想コンテスト リアルタイム集計")
+if 'selected_name' not in st.session_state:
+    st.session_state.selected_name = None
 
 # --- 定数 ---
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1oO-4cpvAManhT_a5hhAfsLqbPTp9NoAHLWz9sWVY-7Q/edit#gid=662336832" # あなたのURL
