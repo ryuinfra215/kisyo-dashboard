@@ -134,12 +134,12 @@ try:
                 {'selector': 'th, td', 'props': [('text-align', 'center')]} # データセル
             ]
             # --- 1. トップ10のランキング ---
-            st.subheader("🎉リアルタイム順位 (Top 5)🎉")
+            st.subheader("🎉リアルタイム順位 (Top 3)🎉")
             display_columns = [
                 '順位', '氏名', '合計誤差(km)', 
             ]
             st.dataframe(
-                result_df.head(5)[display_columns].style.format({'合計誤差(km)': "{:.2f}"}).set_table_styles(table_styles),
+                result_df.head(3)[display_columns].style.format({'合計誤差(km)': "{:.2f}"}).set_table_styles(table_styles),
                 width='stretch',
                 hide_index=True 
             )
