@@ -140,7 +140,7 @@ try:
             ]
             st.dataframe(
                 result_df.head(5)[display_columns].style.format({'合計誤差(km)': "{:.2f}"}).set_table_styles(table_styles),
-                use_container_width=True,
+                width='stretch',
                 hide_index=True 
             )
 
@@ -156,7 +156,7 @@ try:
             header_style = [{'selector': 'th', 'props': [('text-align', 'center')]}]
             st.dataframe(
                 recent_df.head(5)[display_columns_recent].style.format(format_dict).set_properties(**{'text-align': 'center'}).set_table_styles(header_style),
-                use_container_width=True,
+                width='stretch',
                 hide_index=True 
             )
 
@@ -213,7 +213,7 @@ try:
 
             # マーカー（ピン）の描画
             folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
-            folium.Marker(location=actual_path[-1], icon=folium.Icon(color='red', icon='star'), popup='最終到達点').add_to(m)
+            folium.Marker(location=actual_path[-1], icon=folium.Icon(color='red', icon='flag'), popup='最終到達点').add_to(m)
 
             if winner_name == latest_name:
                 folium.Marker(
