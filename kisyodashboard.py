@@ -71,14 +71,14 @@ def load_and_process_data():
     # --- 0件チェック ---
     if len(rows) <= 1:
         empty_cols = [
-            '順位', '氏名', '合計誤差(km)', '誤差_24h(km)', 
+            '順位', '名前', '合計誤差(km)', '誤差_24h(km)', 
             '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)', 'タイムスタンプ'
         ]
         return pd.DataFrame(columns=empty_cols), pd.DataFrame(columns=empty_cols) # 2つのDFを返す
 
     # --- 列の定義 ---
     columns = [
-        'タイムスタンプ', '氏名',
+        'タイムスタンプ', '名前',
         '48時間後の予想緯度（北緯）', '48時間後の予想経度（東経）',
         '予想の根拠', # E列
         '96時間後の予想緯度（北緯）', '96時間後の予想経度（東経）',
@@ -92,6 +92,7 @@ def load_and_process_data():
     for col in num_cols:
         yosou_df[col] = pd.to_numeric(yosou_df[col], errors='coerce')
     yosou_df.dropna(subset=num_cols, inplace=True)
+    yosou_df['名前'] = yosou_df['名前'].replace('', '（未入力）')
 
     # --- ランキング計算 ---
     yosou_df['誤差_24h(km)'] = calculate_distance(yosou_df['24時間後の予想緯度（北緯）'], yosou_df['24時間後の予想経度（東経）'], seikai_lat_24h, seikai_lon_24h)
@@ -102,7 +103,7 @@ def load_and_process_data():
     
     # ★★★ 2種類のDFを返す ★★★
     # 1. 順位順のDF
-    result_df = yosou_df.sort_values(by='合計誤差(km)').round(2).reset_index(drop=True)
+    result_df = yosou_df.sort_values(by='合計誤差(km)').reset_index(drop=True)
     result_df['順位'] = result_df.index + 1
     result_df['タイムスタンプ'] = yosou_df['タイムスタンプ']
     
@@ -116,7 +117,7 @@ try:
     # 手動更新ボタン
     if st.button("🔄 今すぐ手動で更新"):
         st.cache_data.clear() # キャッシュをクリアして即時更新
-
+        st.session_state.selected_name = None
     # データをロードして計算
     result_df, recent_df = load_and_process_data()
 
@@ -124,10 +125,18 @@ try:
         st.info("✅ アプリは正常に起動しています。")
         st.info("まだ応募データがありません。最初の応募をお待ちください！")
     else:
+        format_dict = {
+            '合計誤差(km)': "{:.0f}",
+            '誤差_24h(km)': "{:.0f}",
+            '誤差_48h(km)': "{:.0f}",
+            '誤差_72h(km)': "{:.0f}",
+            '誤差_96h(km)': "{:.0f}"
+        }
+        header_style = [{'selector': 'th', 'props': [('text-align', 'center')]}]
         # --- ★★★ ここからレイアウト修正 ★★★ ---
         # 画面を 2:3 の比率で2列に分割
         col1, col2 = st.columns([2, 3])
-
+        
         # --- col1 (左側) にランキングを表示 ---
         with col1:
             table_styles = [
@@ -136,7 +145,7 @@ try:
             # --- 1. トップ10のランキング ---
             st.subheader("🎉リアルタイム順位 (Top 3)🎉")
             display_columns = [
-                '順位', '氏名', '合計誤差(km)', 
+                '順位', '名前', '合計誤差(km)', 
             ]
             st.dataframe(
                 result_df.head(3)[display_columns].style.format({'合計誤差(km)': "{:.2f}"}).set_table_styles(table_styles),
@@ -149,35 +158,64 @@ try:
             # --- 2. 直近の応募者 (最新5名) ---
             st.subheader("✨ 直近の応募者 (最新5名)")
             st.info(f"現在の参加者数は{len(result_df['合計誤差(km)'])}人です！")
+            if st.button("マップの選択を解除"):
+                st.session_state.selected_name = None
+                st.rerun()
+             
             display_columns_recent= [
-                '順位', '氏名', '合計誤差(km)', '誤差_24h(km)', '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)',
+                '順位', '名前', '合計誤差(km)', '誤差_24h(km)', '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)',
             ]
-            format_dict = {'合計誤差(km)': "{:.0f}",'誤差_24h(km)': "{:.0f}",'誤差_48h(km)': "{:.0f}",'誤差_72h(km)': "{:.0f}",'誤差_96h(km)': "{:.0f}"}
-            header_style = [{'selector': 'th', 'props': [('text-align', 'center')]}]
+
+            # ★ 変更点 3: st.dataframe をクリック可能に
             st.dataframe(
-                recent_df.head(5)[display_columns_recent].style.format(format_dict).set_properties(**{'text-align': 'center'}).set_table_styles(header_style),
+                recent_df.head(5)[display_columns_recent]
+                    .style
+                    .format(format_dict)
+                    .set_properties(**{'text-align': 'center'})
+                    .set_table_styles(header_style),
                 width='stretch',
-                hide_index=True 
+                hide_index=True,
+                on_select="rerun", # 
+                selection_mode="single-row",
+                key="recent_table" # 
             )
+            
+            # ★ 変更点 4: 選択された行の氏名を session_state に保存
+            selection = st.session_state.get('recent_table', {}).get('selection', {})
+            if selection:
+                selected_indices = selection.get('rows', [])
+                if selected_indices:
+                    # .head(5) で絞った後のDFのインデックス(iloc)で氏名を取得
+                    selected_row_data = recent_df.head(5).iloc[selected_indices[0]]
+                    st.session_state.selected_name = selected_row_data['名前']
+        
 
         # --- col2 (右側) にマップを表示 ---
         with col2:
             st.subheader("🗺️**進路予想マップ**")
-            st.markdown("<small>1位:赤、最新:青、その他:グレー</small>",unsafe_allow_html = True)
+            st.markdown("<small>1位:赤、最新:青、選択中:紫、その他:グレー</small>",unsafe_allow_html = True)
            
             map_df = result_df
             
             # 1位と最新の応募者の行データを先に取得
             winner_row = result_df.iloc[0]
             latest_row = recent_df.iloc[0]
-            winner_name = winner_row['氏名']
-            latest_name = latest_row['氏名']
+            winner_name = winner_row['名前']
+            latest_name = latest_row['名前']
+            # ★ 変更点 6: 選択された氏名と行データを取得
+            selected_name_from_state = st.session_state.selected_name
+            selected_row = None
+            if selected_name_from_state:
+                # result_df (全データ) から選択された人の行データを検索
+                selected_row_df = result_df[result_df['名前'] == selected_name_from_state]
+                if not selected_row_df.empty:
+                    selected_row = selected_row_df.iloc[0]
 
             m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='CartoDB positron', attribution_control=False)
             
             # 描画順 1: 「その他全員（グレー）」
             for i, row in map_df.iterrows():
-                if row['氏名'] != winner_name and row['氏名'] != latest_name:
+                if (row['名前'] != winner_name and row['名前'] != latest_name and row['名前'] != selected_name_from_state):
                     user_path = [
                         [start_lat, start_lon],
                         [row['24時間後の予想緯度（北緯）'], row['24時間後の予想経度（東経）']],
@@ -185,13 +223,13 @@ try:
                         [row['72時間後の予想緯度（北緯）'], row['72時間後の予想経度（東経）']],
                         [row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']]
                     ]
-                    folium.PolyLine(locations=user_path, color='gray', weight=2, tooltip=row['氏名']).add_to(m)
+                    folium.PolyLine(locations=user_path, color='gray', weight=2, tooltip=row['名前']).add_to(m)
 
             # 描画順 2: 「実際の経路（黒）」
             AntPath(locations=actual_path, color='black', weight=7, tooltip='実際の経路').add_to(m)
 
             # 描画順 3: 「1位の経路（赤）」
-            if winner_name != latest_name:
+            if winner_name != selected_name_from_state:
                 winner_path = [
                     [start_lat, start_lon],
                     [winner_row['24時間後の予想緯度（北緯）'], winner_row['24時間後の予想経度（東経）']],
@@ -199,17 +237,31 @@ try:
                     [winner_row['72時間後の予想緯度（北緯）'], winner_row['72時間後の予想経度（東経）']],
                     [winner_row['96時間後の予想緯度（北緯）'], winner_row['96時間後の予想経度（東経）']]
                 ]
-                folium.PolyLine(locations=winner_path, color='red', weight=5, tooltip=winner_row['氏名']).add_to(m)
+                folium.PolyLine(locations=winner_path, color='red', weight=5, tooltip=winner_row['名前']).add_to(m)
 
             # 描画順 4: 「最新の経路（青）」
-            latest_path = [
-                [start_lat, start_lon],
-                [latest_row['24時間後の予想緯度（北緯）'], latest_row['24時間後の予想経度（東経）']],
-                [latest_row['48時間後の予想緯度（北緯）'], latest_row['48時間後の予想経度（東経）']],
-                [latest_row['72時間後の予想緯度（北緯）'], latest_row['72時間後の予想経度（東経）']],
-                [latest_row['96時間後の予想緯度（北緯）'], latest_row['96時間後の予想経度（東経）']]
-            ]
-            folium.PolyLine(locations=latest_path, color='blue', weight=5, tooltip=latest_row['氏名']).add_to(m)
+            if latest_name != selected_name_from_state:
+                latest_path=[
+                    [start_lat, start_lon],
+                    [latest_row['24時間後の予想緯度（北緯）'], latest_row['24時間後の予想経度（東経）']],
+                    [latest_row['48時間後の予想緯度（北緯）'], latest_row['48時間後の予想経度（東経）']],
+                    [latest_row['72時間後の予想緯度（北緯）'], latest_row['72時間後の予想経度（東経）']],
+                    [latest_row['96時間後の予想緯度（北緯）'], latest_row['96時間後の予想経度（東経）']]
+                ]
+            folium.PolyLine(locations=latest_path, color='blue', weight=5, tooltip=latest_row['名前']).add_to(m)
+           
+            # 選択中の行データ (selected_row) があれば、最優先で描画
+            if selected_row is not None:
+                selected_path = [
+                    [start_lat, start_lon],
+                    [selected_row['24時間後の予想緯度（北緯）'], selected_row['24時間後の予想経度（東経）']],
+                    [selected_row['48時間後の予想緯度（北緯）'], selected_row['48時間後の予想経度（東経）']],
+                    [selected_row['72時間後の予想緯度（北緯）'], selected_row['72時間後の予想経度（東経）']],
+                    [selected_row['96時間後の予想緯度（北緯）'], selected_row['96時間後の予想経度（東経）']]
+                ]
+                folium.PolyLine(locations=selected_path, color='purple', weight=6, dash_array='5, 5', 
+                                tooltip=f"選択中: {selected_row['名前']}").add_to(m)
+
 
             # マーカー（ピン）の描画
             folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
@@ -219,21 +271,21 @@ try:
                 folium.Marker(
                     location=[winner_row['96時間後の予想緯度（北緯）'], winner_row['96時間後の予想経度（東経）']],
                     icon=folium.Icon(color='purple', icon='user'), 
-                    tooltip=f"<strong>★1位 (NEW!)★: {winner_row['氏名']}</strong>",
-                    popup=f"<strong>★1位 (NEW!)★: {winner_row['氏名']}</strong><br>合計誤差: {winner_row['合計誤差(km)']} km"
+                    tooltip=f"<strong>★1位 (NEW!)★: {winner_row['名前']}</strong>",
+                    popup=f"<strong>★1位 (NEW!)★: {winner_row['名前']}</strong><br>合計誤差: {winner_row['合計誤差(km)']} km"
                 ).add_to(m)
             else:
                 folium.Marker(
                     location=[winner_row['96時間後の予想緯度（北緯）'], winner_row['96時間後の予想経度（東経）']],
                     icon=folium.Icon(color='red', icon='user'),
-                    tooltip=f"<strong>{winner_row['順位']}位: {winner_row['氏名']}</strong>",
-                    popup=f"<strong>{winner_row['順位']}位: {winner_row['氏名']}</strong><br>合計誤差: {winner_row['合計誤差(km)']} km"
+                    tooltip=f"<strong>{winner_row['順位']}位: {winner_row['名前']}</strong>",
+                    popup=f"<strong>{winner_row['順位']}位: {winner_row['名前']}</strong><br>合計誤差: {winner_row['合計誤差(km)']} km"
                 ).add_to(m)
                 folium.Marker(
                     location=[latest_row['96時間後の予想緯度（北緯）'], latest_row['96時間後の予想経度（東経）']],
                     icon=folium.Icon(color='blue', icon='user'),
-                    tooltip=f"<strong>{latest_row['順位']}位 (最新): {latest_row['氏名']}</strong>",
-                    popup=f"<strong>{latest_row['順位']}位 (最新): {latest_row['氏名']}</strong><br>合計誤差: {latest_row['合計誤差(km)']} km"
+                    tooltip=f"<strong>{latest_row['順位']}位 (最新): {latest_row['名前']}</strong>",
+                    popup=f"<strong>{latest_row['順位']}位 (最新): {latest_row['名前']}</strong><br>合計誤差: {latest_row['合計誤差(km)']} km"
                 ).add_to(m)
             
             st_folium(m, width='100%', height=500, key="result_map")
