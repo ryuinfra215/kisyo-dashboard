@@ -250,7 +250,7 @@ try:
                     [latest_row['72時間後の予想緯度（北緯）'], latest_row['72時間後の予想経度（東経）']],
                     [latest_row['96時間後の予想緯度（北緯）'], latest_row['96時間後の予想経度（東経）']]
                 ]
-            folium.PolyLine(locations=latest_path, color='blue', weight=5, tooltip=latest_row['名前']).add_to(m)
+                folium.PolyLine(locations=latest_path, color='blue', weight=5, tooltip=latest_row['名前']).add_to(m)
            
             # 選択中の行データ (selected_row) があれば、最優先で描画
             if selected_row is not None:
