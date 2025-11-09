@@ -46,12 +46,21 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     return R * c
 
 # --- メインの処理（手動更新専用） ---
+# ==========================================================
+# 修正版の load_and_process_data 関数
+# ==========================================================
 @st.cache_data 
 def load_and_process_data():
     # --- 1. 認証 ---
     scopes = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds_dict_raw = st.secrets["gcp_service_account"]
-    creds_dict_fixed = creds_dict_raw.to_dict()
+    
+    # st.secrets が to_dict() をサポートしていない場合のフォールバック
+    if hasattr(creds_dict_raw, 'to_dict'):
+        creds_dict_fixed = creds_dict_raw.to_dict()
+    else:
+        creds_dict_fixed = dict(creds_dict_raw)
+        
     creds_dict_fixed['private_key'] = creds_dict_fixed['private_key'].replace(r'\\n', '\n').replace(r'\n', '\n')
     creds = Credentials.from_service_account_info(creds_dict_fixed, scopes=scopes)
     gc = gspread.authorize(creds)
@@ -64,7 +73,7 @@ def load_and_process_data():
         if gid_str.isdigit():
             worksheet = spreadsheet.get_worksheet_by_id(int(gid_str))
         if worksheet is None:
-            worksheet = spreadsheet.worksheet("フォームの回答 1")
+            worksheet = spreadsheet.worksheet("フォームの回答 1") # デフォルト名
     except Exception:
         worksheet = gc.open_by_url(SPREADSHEET_URL).sheet1
     
@@ -72,11 +81,8 @@ def load_and_process_data():
 
     # --- 0件チェック ---
     if len(rows) <= 1:
-        empty_cols = [
-            '順位', '名前', '合計誤差(km)', '誤差_24h(km)', 
-            '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)', 'タイムスタンプ'
-        ]
-        return pd.DataFrame(columns=empty_cols), pd.DataFrame(columns=empty_cols) # 2つのDFを返す
+        empty_cols = ['順位', '名前', '合計誤差(km)', '誤差_24h(km)', '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)', 'タイムスタンプ']
+        return pd.DataFrame(columns=empty_cols), pd.DataFrame(columns=empty_cols)
 
     # --- 列の定義 ---
     columns = [
@@ -96,6 +102,15 @@ def load_and_process_data():
     yosou_df.dropna(subset=num_cols, inplace=True)
     yosou_df['名前'] = yosou_df['名前'].replace('', '（未入力）')
 
+    # --- ★★★ ここから修正 ★★★ ---
+    # タイムスタンプを日付時刻型に変換（これがソートに必要）
+    # 形式が "YYYY/MM/DD HH:MM:SS" でない場合、エラーになる可能性がある
+    try:
+        yosou_df['タイムスタンプ_dt'] = pd.to_datetime(yosou_df['タイムスタンプ'])
+    except Exception:
+        # 形式が異なる場合のフォールバック（例: MM/DD/YYYY）
+        yosou_df['タイムスタンプ_dt'] = pd.to_datetime(yosou_df['タイムスタンプ'], errors='coerce')
+
     # --- ランキング計算 ---
     yosou_df['誤差_24h(km)'] = calculate_distance(yosou_df['24時間後の予想緯度（北緯）'], yosou_df['24時間後の予想経度（東経）'], seikai_lat_24h, seikai_lon_24h)
     yosou_df['誤差_48h(km)'] = calculate_distance(yosou_df['48時間後の予想緯度（北緯）'], yosou_df['48時間後の予想経度（東経）'], seikai_lat_48h, seikai_lon_48h)
@@ -103,17 +118,31 @@ def load_and_process_data():
     yosou_df['誤差_96h(km)'] = calculate_distance(yosou_df['96時間後の予想緯度（北緯）'], yosou_df['96時間後の予想経度（東経）'], seikai_lat_96h, seikai_lon_96h)
     yosou_df['合計誤差(km)'] = yosou_df['誤差_24h(km)'] + yosou_df['誤差_48h(km)'] + yosou_df['誤差_72h(km)'] + yosou_df['誤差_96h(km)']
     
-    # ★★★ 2種類のDFを返す ★★★
-    # 1. 順位順のDF
+    # --- 1. 順位順のDF (result_df) を作成 ---
     result_df = yosou_df.sort_values(by='合計誤差(km)').reset_index(drop=True)
     result_df['順位'] = result_df.index + 1
-    result_df['タイムスタンプ'] = yosou_df['タイムスタンプ']
     
-    # 2. タイムスタンプ順のDF
-    recent_df = result_df.sort_values(by='タイムスタンプ', ascending=False)
+    # --- 2. タイムスタンプ順のDF (recent_df) を作成 ---
+    # result_df (誤差順) ではなく、yosou_df (元の順序) をベースにする
     
-    return result_df, recent_df # 2つ返す
+    # yosou_df に「順位」情報をマージ（結合）する
+    # result_df から必要な列だけ（順位、名前、タイムスタンプ）を抽出
+    rank_info = result_df[['名前', 'タイムスタンプ', '順位']]
+    
+    # yosou_df (元の時系列順) に順位情報をマージ
+    merged_df = pd.merge(yosou_df, rank_info, on=['名前', 'タイムスタンプ'], how='left')
+    
+    # タイムスタンプ（datetimeオブジェクト）で降順ソート（最新が上）
+    recent_df = merged_df.sort_values(by='タイムスタンプ_dt', ascending=False)
+    
+    # 不要な列を削除
+    if 'タイムスタンプ_dt' in result_df.columns:
+        result_df = result_df.drop(columns=['タイムスタンプ_dt'])
+    if 'タイムスタンプ_dt' in recent_df.columns:
+        recent_df = recent_df.drop(columns=['タイムスタンプ_dt'])
 
+    return result_df, recent_df # 2つ返す
+# ==========================================================
 # --- アプリの実行 ---
 try:
     # 手動更新ボタン
