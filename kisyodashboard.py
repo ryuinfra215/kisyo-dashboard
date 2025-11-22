@@ -246,19 +246,18 @@ try:
         with col2:
             st.subheader("🗺️**進路予想マップ**")
             
-            # ★追加: 経過時間を計算
-            elapsed_time = time.time() - st.session_state.update_start_time
-            # 120秒(2分)以内なら True、それ以外は False
-            show_lines = elapsed_time < 120
-            
-            # 残り時間を表示（オプション）
-            if show_lines:
-                remaining = int(120 - elapsed_time)
-                st.caption(f"⏳ 結果表示中... あと {remaining} 秒でラインが非表示になります")
-                st.markdown("<small>1位:赤、最新:青、選択中:紫(破線)、その他:濃いグレー</small>", unsafe_allow_html=True)
-            else:
-                st.caption("🔒 表示時間が終了しました（更新ボタンで再表示）")
+            # ★変更1: ここに「後から数字を書き換える場所」を作っておく
+            timer_placeholder = st.empty()
 
+            # 経過時間を計算
+            elapsed_time = time.time() - st.session_state.update_start_time
+            show_lines = elapsed_time < 120 # 2分以内ならTrue
+
+            # もし時間が過ぎていたらメッセージを表示
+            if not show_lines:
+                timer_placeholder.caption("🔒 表示時間が終了しました（更新ボタンで再表示）")
+            
+            st.markdown("<small>1位:赤、最新:青、選択中:紫(破線)、その他:濃いグレー</small>", unsafe_allow_html=True)
             
             map_df = result_df
             
@@ -272,7 +271,7 @@ try:
             # ベースの地図（常に表示）
             m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='OpenStreetMap', attribution_control=False)
             
-            # --- ★ここから条件分岐: show_lines が True のときだけ線を描く ---
+            # --- 線を描く条件分岐 ---
             if show_lines:
                 # 描画順 1: 「その他全員（濃いグレー）」
                 for i, row in map_df.iterrows():
@@ -330,8 +329,7 @@ try:
                             folium.PolyLine(locations=selected_path, color='purple', weight=6, dash_array='5, 5', 
                                             tooltip=f"選択中: {person_data['名前']}").add_to(m)
 
-                # ピン（マーカー）も条件付きで表示する場合はここに入れる
-                # 1位と最新マーカー
+                # 1位マーカー
                 folium.Marker(
                     location=[winner_row['96時間後の予想緯度（北緯）'], winner_row['96時間後の予想経度（東経）']],
                     icon=folium.Icon(color='red', icon='user'),
@@ -346,22 +344,26 @@ try:
                         tooltip=f"<strong>{latest_row['順位']}位 (最新): {latest_row['名前']}</strong>",
                         popup=f"<strong>{latest_row['順位']}位 (最新): {latest_row['名前']}</strong><br>合計誤差: {latest_row['合計誤差(km)']} km"
                     ).add_to(m)
-            
-            # --- 条件分岐終了 ---
 
-            # スタート地点と最終到達点のピンは常に表示（地図が寂しくならないように）
+            # スタート地点と最終到達点のピン（常時表示）
             folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
             folium.Marker(location=actual_path[-1], icon=folium.Icon(color='red', icon='flag'), popup='最終到達点').add_to(m)
 
             # 地図を表示
             st_folium(m, width='100%', height=800, key="result_map")
 
-            # ★重要: 線が表示されている場合、残り時間待機して自動リロードする
+            # ★変更2: 線が表示されている間、1秒ごとに数字を減らして書き換える
             if show_lines:
-                remaining_seconds = 120 - elapsed_time
-                if remaining_seconds > 0:
-                    time.sleep(remaining_seconds) # 残り時間だけ待つ
-                    st.rerun() # 画面をリロード（これで線が消える）
+                remaining_seconds = int(120 - elapsed_time)
+                
+                # カウントダウンループ
+                for i in range(remaining_seconds, -1, -1):
+                    # 最初に作った timer_placeholder の中身を書き換える
+                    timer_placeholder.caption(f"⏳ 結果表示中... あと {i} 秒でラインが非表示になります")
+                    time.sleep(1) # 1秒待つ
+                
+                # 0秒になったらリロードして線を消す
+                st.rerun()
                     
 except Exception as e:
     st.error(f"🚨データの読み込み中にエラーが発生しました: {e}")
