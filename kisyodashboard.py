@@ -1,5 +1,5 @@
 # ==========================================================
-# 最終修正版 result_app.py (正解ポイント表示版)
+# 最終修正版 result_app.py (マーカー表示制御修正版)
 # ==========================================================
 import streamlit as st
 import gspread
@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import folium
 import time
-from folium.plugins import AntPath, BeautifyIcon # ★BeautifyIconを追加
+from folium.plugins import AntPath, BeautifyIcon
 from streamlit_folium import st_folium
 from google.oauth2.service_account import Credentials
 
@@ -191,7 +191,7 @@ try:
             
             timer_placeholder = st.empty()
             elapsed_time = time.time() - st.session_state.update_start_time
-            show_lines = elapsed_time < 120 # 2分以内ならTrue
+            show_lines = elapsed_time < 120 # 120秒(2分)以内ならTrue
 
             if not show_lines:
                 timer_placeholder.caption("🔒 表示時間が終了しました（更新ボタンで再表示）")
@@ -208,30 +208,29 @@ try:
             # 地図作成
             m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='OpenStreetMap', attribution_control=False)
             
-            # --- ★追加: 正解の各時間ポイントに「24」などのアイコンを表示 ---
-            correct_points = [
-                {"num": 24, "lat": seikai_lat_24h, "lon": seikai_lon_24h},
-                {"num": 48, "lat": seikai_lat_48h, "lon": seikai_lon_48h},
-                {"num": 72, "lat": seikai_lat_72h, "lon": seikai_lon_72h},
-                {"num": 96, "lat": seikai_lat_96h, "lon": seikai_lon_96h},
-            ]
-            for pt in correct_points:
-                icon = BeautifyIcon(
-                    number=pt["num"],
-                    border_color='black', # 枠線の色
-                    text_color='black',   # 数字の色
-                    background_color='#FFF', # 背景色
-                    inner_icon_style='font-size:12px;font-weight:bold;'
-                )
-                folium.Marker(
-                    [pt["lat"], pt["lon"]],
-                    icon=icon,
-                    tooltip=f"正解: {pt['num']}時間後"
-                ).add_to(m)
-            # -----------------------------------------------------------
-
             # --- ライン描画処理 (時間内のみ) ---
             if show_lines:
+                # ★修正: 正解ポイントの描画を if show_lines の中に移動
+                correct_points = [
+                    {"num": 24, "lat": seikai_lat_24h, "lon": seikai_lon_24h},
+                    {"num": 48, "lat": seikai_lat_48h, "lon": seikai_lon_48h},
+                    {"num": 72, "lat": seikai_lat_72h, "lon": seikai_lon_72h},
+                    {"num": 96, "lat": seikai_lat_96h, "lon": seikai_lon_96h},
+                ]
+                for pt in correct_points:
+                    icon = BeautifyIcon(
+                        number=pt["num"],
+                        border_color='black', # 枠線の色
+                        text_color='black',   # 数字の色
+                        background_color='#FFF', # 背景色
+                        inner_icon_style='font-size:12px;font-weight:bold;'
+                    )
+                    folium.Marker(
+                        [pt["lat"], pt["lon"]],
+                        icon=icon,
+                        tooltip=f"正解: {pt['num']}時間後"
+                    ).add_to(m)
+                
                 # その他 (グレー)
                 for i, row in map_df.iterrows():
                     if (row['名前'] != winner_name and row['名前'] != latest_name and row['名前'] not in selected_names_list): 
@@ -281,7 +280,7 @@ try:
                 if winner_name != latest_name:
                     folium.Marker(location=[latest_row['96時間後の予想緯度（北緯）'], latest_row['96時間後の予想経度（東経）']], icon=folium.Icon(color='blue', icon='user'), tooltip=f"<strong>{latest_row['順位']}位 (最新): {latest_row['名前']}</strong>", popup=f"<strong>{latest_row['順位']}位 (最新): {latest_row['名前']}</strong><br>合計誤差: {latest_row['合計誤差(km)']} km").add_to(m)
 
-            # 共通マーカー
+            # 共通マーカー (これらは常時表示のままにしています。もし消したい場合は if show_lines の中へ移動してください)
             folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
             
             # 地図描画
