@@ -245,7 +245,13 @@ try:
             # ★変更: session_state から「選択された名前リスト」を取得
             selected_names_list = st.session_state.selected_names
 
-            m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='CartoDB positron', attribution_control=False)
+            # ★変更1: tiles を 'OpenStreetMap' (カラー) に変更
+            m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='OpenStreetMap', attribution_control=False)
+            
+            # ... (中略: 線の描画などはそのまま) ...
+
+            # ★変更2: height を 500 から 800 (または好きな高さ) に変更して縦長にする
+            st_folium(m, width='100%', height=800, key="result_map")
             
             # 描画順 1: 「その他全員（グレー）」
             
