@@ -354,7 +354,7 @@ try:
 
             # ★変更2: 線が表示されている間、1秒ごとに数字を減らして書き換える
             if show_lines:
-                remaining_seconds = int(120 - elapsed_time)
+                remaining_seconds = int(60 - elapsed_time)
                 
                 # カウントダウンループ
                 for i in range(remaining_seconds, -1, -1):
