@@ -1,6 +1,5 @@
 # ==========================================================
-# 最終修正版 kisyodashboard.py (認証・Secrets参照削除済み)
-# Googleシート連携をダミー認証で起動する
+# 最終修正版 result_app.py (マーカー表示制御修正版)
 # ==========================================================
 import streamlit as st
 import gspread
@@ -14,7 +13,7 @@ from google.oauth2.service_account import Credentials
 
 # --- アプリの基本設定 ---
 st.set_page_config(page_title="台風コンテスト リアルタイム集計", layout="wide")
-st.title("🌪️ 台風進路予想コンテスト リアルタイム集計 (デモモード)")
+st.title("🌪️ 台風進路予想コンテスト リアルタイム集計")
 
 # 名前リストの初期化
 if 'selected_names' not in st.session_state:
@@ -23,13 +22,8 @@ if 'selected_names' not in st.session_state:
 # 更新ボタンを押した時刻を記録する変数
 if 'update_start_time' not in st.session_state:
     st.session_state.update_start_time = 0
-    
-# 🔥 締め切り状態をデモとして初期化
-if 'is_closed' not in st.session_state:
-    st.session_state.is_closed = False
 
 # --- 定数 ---
-# ※ Secretsが動かないため、Google Sheets連携は機能しません。
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1oO-4cpvAManhT_a5hhAfsLqbPTp9NoAHLWz9sWVY-7Q/edit#gid=662336832"
 start_lat = 19.8
 start_lon = 140.4
@@ -49,7 +43,7 @@ actual_path = [
     [seikai_lat_96h, seikai_lon_96h]
 ]
 
-# --- 距離計算 (既存) ---
+# --- 距離計算 ---
 def calculate_distance(lat1, lon1, lat2, lon2):
     R = 6371
     lat1_rad, lon1_rad, lat2_rad, lon2_rad = map(np.radians, [lat1, lon1, lat2, lon2])
@@ -58,20 +52,12 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
     return R * c
 
-# --- データ取得関数 (Secrets参照を削除) ---
+# --- データ取得関数 ---
 @st.cache_data 
 def load_and_process_data():
-    # 🔥 認証情報をダミーデータで初期化 (Secrets参照を避ける)
-    # ※ この認証は失敗しますが、エラーを回避するために必要です。
+    # 認証
     scopes = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds_dict_raw = {
-        "type": "service_account", 
-        "project_id": "dummy-project",
-        "private_key_id": "dummy",
-        "private_key": "-----BEGIN PRIVATE KEY-----\n", # ダミーキー
-        "client_email": "dummy@example.com",
-        "token_uri": "https://oauth2.googleapis.com/token",
-    }
+    creds_dict_raw = st.secrets["gcp_service_account"]
     
     if hasattr(creds_dict_raw, 'to_dict'):
         creds_dict_fixed = creds_dict_raw.to_dict()
@@ -79,12 +65,11 @@ def load_and_process_data():
         creds_dict_fixed = dict(creds_dict_raw)
         
     creds_dict_fixed['private_key'] = creds_dict_fixed['private_key'].replace(r'\\n', '\n').replace(r'\n', '\n')
-    
-    # 🔥 ここでgspreadの認証は失敗しますが、try-exceptブロックでエラーを捕捉し、
-    # 空のデータフレームを返すようにします。
+    creds = Credentials.from_service_account_info(creds_dict_fixed, scopes=scopes)
+    gc = gspread.authorize(creds)
+
+    # データ読み込み
     try:
-        creds = Credentials.from_service_account_info(creds_dict_fixed, scopes=scopes)
-        gc = gspread.authorize(creds)
         spreadsheet = gc.open_by_url(SPREADSHEET_URL)
         gid_str = SPREADSHEET_URL.split('gid=')[-1].split('&')[0]
         worksheet = None
@@ -92,45 +77,37 @@ def load_and_process_data():
             worksheet = spreadsheet.get_worksheet_by_id(int(gid_str))
         if worksheet is None:
             worksheet = spreadsheet.worksheet("フォームの回答 1")
-        rows = worksheet.get_all_values()
     except Exception:
-        # Secretsエラーや認証失敗の場合、空のデータフレームを返す
-        st.warning("🚨 Google Sheets認証に失敗したため、デモデータを使用します。")
-        return create_dummy_dataframe() # ダミーデータ生成関数を呼び出す
+        worksheet = gc.open_by_url(SPREADSHEET_URL).sheet1
     
-    # ... (データ処理ロジックは Secrets認証が成功した場合のみ実行されるべきだが、
-    # 簡略化のため、ここではダミーデータ生成を優先) ...
-    
-    # 認証が成功した場合の処理 (ここでは実行されない可能性が高い)
+    rows = worksheet.get_all_values()
+
     if len(rows) <= 1:
         empty_cols = ['順位', '名前', '合計誤差(km)', '誤差_24h(km)', '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)', 'タイムスタンプ']
         return pd.DataFrame(columns=empty_cols), pd.DataFrame(columns=empty_cols)
-    
-    # ... (以下、元のデータ処理ロジックを続行) ...
 
-    # 🔥 認証が失敗しているため、コードを簡略化し、try-exceptでダミーデータを返すようにします。
-    return create_dummy_dataframe()
+    columns = [
+        'タイムスタンプ', '名前',
+        '48時間後の予想緯度（北緯）', '48時間後の予想経度（東経）',
+        '予想の根拠', 
+        '96時間後の予想緯度（北緯）', '96時間後の予想経度（東経）',
+        '24時間後の予想緯度（北緯）', '24時間後の予想経度（東経）',
+        '72時間後の予想緯度（北緯）', '72時間後の予想経度（東経）'
+    ]
+    yosou_df = pd.DataFrame(rows[1:], columns=columns)
 
+    num_cols = [col for col in columns if '緯度' in col or '経度' in col]
+    for col in num_cols:
+        yosou_df[col] = pd.to_numeric(yosou_df[col], errors='coerce')
+    yosou_df.dropna(subset=num_cols, inplace=True)
+    yosou_df['名前'] = yosou_df['名前'].replace('', '（未入力）')
 
-# 🔥 デモ用のダミーデータ生成関数 🔥
-def create_dummy_dataframe():
-    data = {
-        'タイムスタンプ': [time.ctime(time.time() - i * 3600) for i in range(5)],
-        '名前': ['運営者デモ', '参加者A', '参加者B', '参加者C', 'ワースト'],
-        '48時間後の予想緯度（北緯）': [28.0, 27.0, 29.0, 28.5, 35.0],
-        '48時間後の予想経度（東経）': [138.0, 137.5, 139.0, 138.2, 145.0],
-        '予想の根拠': ['テスト', 'テスト', 'テスト', 'テスト', 'テスト'],
-        '96時間後の予想緯度（北緯）': [40.0, 42.0, 39.0, 41.0, 50.0],
-        '96時間後の予想経度（東経）': [145.0, 146.0, 144.0, 145.5, 150.0],
-        '24時間後の予想緯度（北緯）': [23.0, 22.5, 24.0, 23.5, 28.0],
-        '24時間後の予想経度（東経）': [140.0, 139.5, 141.0, 140.5, 148.0],
-        '72時間後の予想緯度（北緯）': [32.0, 31.0, 33.0, 32.5, 38.0],
-        '72時間後の予想経度（東経）': [137.0, 136.5, 138.0, 137.5, 148.0],
-    }
-    yosou_df = pd.DataFrame(data)
-    yosou_df['タイムスタンプ_dt'] = pd.to_datetime(yosou_df['タイムスタンプ'])
+    try:
+        yosou_df['タイムスタンプ_dt'] = pd.to_datetime(yosou_df['タイムスタンプ'])
+    except Exception:
+        yosou_df['タイムスタンプ_dt'] = pd.to_datetime(yosou_df['タイムスタンプ'], errors='coerce')
 
-    # ランキング計算 (ダミーデータに対して実行)
+    # ランキング計算
     yosou_df['誤差_24h(km)'] = calculate_distance(yosou_df['24時間後の予想緯度（北緯）'], yosou_df['24時間後の予想経度（東経）'], seikai_lat_24h, seikai_lon_24h)
     yosou_df['誤差_48h(km)'] = calculate_distance(yosou_df['48時間後の予想緯度（北緯）'], yosou_df['48時間後の予想経度（東経）'], seikai_lat_48h, seikai_lon_48h)
     yosou_df['誤差_72h(km)'] = calculate_distance(yosou_df['72時間後の予想緯度（北緯）'], yosou_df['72時間後の予想経度（東経）'], seikai_lat_72h, seikai_lon_72h)
@@ -139,53 +116,33 @@ def create_dummy_dataframe():
     
     result_df = yosou_df.sort_values(by='合計誤差(km)').reset_index(drop=True)
     result_df['順位'] = result_df.index + 1
-    recent_df = result_df.sort_values(by='タイムスタンプ_dt', ascending=False)
     
-    return result_df, recent_df
+    rank_info = result_df[['名前', 'タイムスタンプ', '順位']]
+    merged_df = pd.merge(yosou_df, rank_info, on=['名前', 'タイムスタンプ'], how='left')
+    recent_df = merged_df.sort_values(by='タイムスタンプ_dt', ascending=False)
+    
+    if 'タイムスタンプ_dt' in result_df.columns:
+        result_df = result_df.drop(columns=['タイムスタンプ_dt'])
+    if 'タイムスタンプ_dt' in recent_df.columns:
+        recent_df = recent_df.drop(columns=['タイムスタンプ_dt'])
 
+    return result_df, recent_df
 
 # ==========================================================
 # --- アプリの実行 ---
 try:
-    # 🔥 締め切りボタンを再配置し、デモとして機能させる 🔥
-    col_close, col_open, col_update = st.columns(3)
-    
-    with col_close:
-        if col_close.button("🚨 正解表示ON (デモ)", type="primary", use_container_width=True):
-            st.session_state.is_closed = True
-            st.cache_data.clear()
-            st.rerun()
-            
-    with col_open:
-        if col_open.button("✅ 正解非表示OFF (デモ)", type="secondary", use_container_width=True):
-            st.session_state.is_closed = False
-            st.cache_data.clear()
-            st.rerun()
-            
-    with col_update:
-         if col_update.button("🔄 データ更新 (デモ)", type="secondary", use_container_width=True):
-            st.cache_data.clear()
-            st.session_state.selected_names = []
-            st.session_state.update_start_time = time.time()
-            st.rerun()
-
-
-    # データをロードして計算 (認証失敗時はダミーデータが返る)
+    # 手動更新ボタン
+    if st.button("🔄 今すぐ手動で更新"):
+        st.cache_data.clear() # キャッシュをクリア
+        st.session_state.selected_names = []
+        st.session_state.update_start_time = time.time()
+        
+    # データをロードして計算
     result_df, recent_df = load_and_process_data()
-
-    # 🔥 締め切り状態の通知
-    st.divider()
-    if st.session_state.is_closed:
-         st.warning("⚠️ 正解進路が表示されています。")
-    else:
-         st.info("📣 正解進路は表示されていません。")
-    st.divider()
-    # 🔥 パネル終了 🔥
-
 
     if result_df.empty:
         st.info("✅ アプリは正常に起動しています。")
-        st.info("まだ応募データがありません。デモデータを使用します。")
+        st.info("まだ応募データがありません。最初の応募をお待ちください！")
     else:
         format_dict = {
             '合計誤差(km)': "{:.0f}", '誤差_24h(km)': "{:.0f}", '誤差_48h(km)': "{:.0f}", '誤差_72h(km)': "{:.0f}", '誤差_96h(km)': "{:.0f}"
@@ -205,12 +162,12 @@ try:
             st.divider() 
 
             st.subheader("✨ 直近の応募者 (最新5名)")
-            st.info(f"現在の参加者数は{len(result_df)}人です！ (デモ)")
+            st.info(f"現在の参加者数は{len(result_df['合計誤差(km)'])}人です！")
             
             if st.button("マップの選択を解除"):
                 st.session_state.selected_names = []
                 st.rerun()
-            
+             
             display_columns_recent= ['順位', '名前', '合計誤差(km)', '誤差_24h(km)', '誤差_48h(km)', '誤差_72h(km)', '誤差_96h(km)']
             target_recent_df = recent_df.head(5)
 
@@ -234,10 +191,9 @@ try:
             
             timer_placeholder = st.empty()
             elapsed_time = time.time() - st.session_state.update_start_time
-            # ライン表示の制御は、締め切り状態に依存させる
-            show_lines = st.session_state.is_closed or (elapsed_time < 120) 
-            
-            if not show_lines and not st.session_state.is_closed:
+            show_lines = elapsed_time < 120 # 120秒(2分)以内ならTrue
+
+            if not show_lines:
                 timer_placeholder.caption("🔒 表示時間が終了しました（更新ボタンで再表示）")
             
             st.markdown("<small>1位:赤、最新:青、選択中:紫(破線)、その他:濃いグレー</small>", unsafe_allow_html=True)
@@ -252,16 +208,9 @@ try:
             # 地図作成
             m = folium.Map(location=[seikai_lat_72h, seikai_lon_72h], zoom_start=5, tiles='OpenStreetMap', attribution_control=False)
             
-            # 共通マーカー (スタート地点)
-            folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
-
-
-            # 🔥 真の進路の描画は、締め切り後のみ 🔥
-            if st.session_state.is_closed:
-                # 実際の経路 (黒)
-                AntPath(locations=actual_path, color='black', weight=7, tooltip='実際の経路').add_to(m)
-
-                # 正解ポイントのマーカー
+            # --- ライン描画処理 (時間内のみ) ---
+            if show_lines:
+                # ★修正: 正解ポイントの描画を if show_lines の中に移動
                 correct_points = [
                     {"num": 24, "lat": seikai_lat_24h, "lon": seikai_lon_24h},
                     {"num": 48, "lat": seikai_lat_48h, "lon": seikai_lon_48h},
@@ -271,9 +220,9 @@ try:
                 for pt in correct_points:
                     icon = BeautifyIcon(
                         number=pt["num"],
-                        border_color='black',
-                        text_color='black', 
-                        background_color='#FFF',
+                        border_color='black', # 枠線の色
+                        text_color='black',   # 数字の色
+                        background_color='#FFF', # 背景色
                         inner_icon_style='font-size:12px;font-weight:bold;'
                     )
                     folium.Marker(
@@ -281,13 +230,9 @@ try:
                         icon=icon,
                         tooltip=f"正解: {pt['num']}時間後"
                     ).add_to(m)
-
-
-            # --- 応募者の予想ライン描画 ---
-            if show_lines: 
+                
                 # その他 (グレー)
                 for i, row in map_df.iterrows():
-                    # 1位、最新、選択中ではない場合
                     if (row['名前'] != winner_name and row['名前'] != latest_name and row['名前'] not in selected_names_list): 
                         user_path = [
                             [start_lat, start_lon], [row['24時間後の予想緯度（北緯）'], row['24時間後の予想経度（東経）']],
@@ -295,6 +240,9 @@ try:
                             [row['96時間後の予想緯度（北緯）'], row['96時間後の予想経度（東経）']]
                         ]
                         folium.PolyLine(locations=user_path, color='#555555', weight=3, opacity=0.6, tooltip=row['名前']).add_to(m)
+
+                # 実際の経路 (黒)
+                AntPath(locations=actual_path, color='black', weight=7, tooltip='実際の経路').add_to(m)
 
                 # 1位 (赤)
                 if winner_name not in selected_names_list:
@@ -327,17 +275,19 @@ try:
                             ]
                             folium.PolyLine(locations=selected_path, color='purple', weight=6, dash_array='5, 5', tooltip=f"選択中: {person_data['名前']}").add_to(m)
 
-                # マーカー (96h後の予想終点のみ)
+                # マーカー
                 folium.Marker(location=[winner_row['96時間後の予想緯度（北緯）'], winner_row['96時間後の予想経度（東経）']], icon=folium.Icon(color='red', icon='user'), tooltip=f"<strong>{winner_row['順位']}位: {winner_row['名前']}</strong>", popup=f"<strong>{winner_row['順位']}位: {winner_row['名前']}</strong><br>合計誤差: {winner_row['合計誤差(km)']} km").add_to(m)
                 if winner_name != latest_name:
                     folium.Marker(location=[latest_row['96時間後の予想緯度（北緯）'], latest_row['96時間後の予想経度（東経）']], icon=folium.Icon(color='blue', icon='user'), tooltip=f"<strong>{latest_row['順位']}位 (最新): {latest_row['名前']}</strong>", popup=f"<strong>{latest_row['順位']}位 (最新): {latest_row['名前']}</strong><br>合計誤差: {latest_row['合計誤差(km)']} km").add_to(m)
 
-
+            # 共通マーカー (これらは常時表示のままにしています。もし消したい場合は if show_lines の中へ移動してください)
+            folium.Marker(location=[start_lat, start_lon], icon=folium.Icon(color='gray', icon='flag-checkered'), popup='スタート').add_to(m)
+            
             # 地図描画
             st_folium(m, width='100%', height=800, key="result_map")
 
             # --- カウントダウン処理 ---
-            if show_lines and not st.session_state.is_closed:
+            if show_lines:
                 remaining_seconds = int(120 - elapsed_time)
                 for i in range(remaining_seconds, -1, -1):
                     timer_placeholder.caption(f"⏳ 結果表示中... あと {i} 秒でラインが非表示になります")
